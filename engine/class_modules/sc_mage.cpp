@@ -3578,25 +3578,38 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
 
     arcane_mage_spell_t::execute();
 
-    // real important: check if arcane charge is gained BEFORE or AFTER pulse gets executed.
-    // this matters because if we cast pulse at 0ac, if trigger_arcane_charge is executed BEFORE echo goes out, then w/ the way its written right now, we'd be losing damage
-    // because the echo would benefit from 1ac, whilst the initial actual pulse cast is at 0ac. anyways, check in game. check EVERY trigger beneath this.
-    if ( type == pulse_type::NORMAL && rng().roll( p()->talents.reverberate->effectN( 1 ).percent() ) ) // not hooked to spell data. future. need to also add a talent.reverberate checker. see if this works w/o a talent checker rn cuz its long, hopefully itll return 0.
-      pulse_echo->execute_on_target( target );
+    // arcane charges triggered by pulse's echo do not benefit from impetus.
+    auto pulse_charges = p()->talents.arcane_pulse->effectN( 2 ).base_value();
+    p()->trigger_arcane_charge( type == pulse_type::NORMAL ? pulse_charges : ( pulse_charges - p()->talents.impetus->effectN( 1 ).base_value() ) );
 
-    if ( type == pulse_type::NORMAL )
-      p()->trigger_arcane_charge( p()->talents.arcane_pulse->effectN( 2 ).base_value() ); // see if echo actually gives AC back, maybe combine the if type checker into one instead of seperating it.
-
-    // need to see if background effects'll trigger salvo/splinters, because currently the echo will execute both of these.
     p()->trigger_arcane_salvo();
-    p()->trigger_splinter( target );
+    p()->trigger_splinter( target ); // goes on the target. check if its the spell target, particularily for the random target application s word for its echo
+  }
+
+  void impact ( action_state_t* s ) override
+  {
+    arcane_mage_spell_t::impact( s );
+
+    // the trigger_dmg of pulse gets damage multiplied based on shit, like surge or whateva, so it technically gets affected twice. 
+    // CHECK if its like this, or if its no multiplier -- add a dmg flag to apply only to it if so, and its chill.
+    if ( s->chain_target == 0 && type == pulse_type::NORMAL && rng().roll( p()->talents.reverberate->effectN( 1 ).percent() ) )
+    {
+      make_event( *sim, 150_ms, [ this, trigger_dmg = p()->talents.reverberate->effectN( 2 ).percent() * s->result_total ] 
+      {
+        // pulse echo is not executed on the main target, it's executed on one random target which was damaged by the normal pulse.
+        std::vector<player_t*> tl = pulse_echo->target_list(); 
+        rng().shuffle( tl.begin(), tl.end() );
+        pulse_echo->execute_on_target( tl[0], trigger_dmg );
+      } );
+    }
   }
 
   double action_multiplier() const override
   {
     double am = arcane_mage_spell_t::action_multiplier();
 
-    am *= arcane_charge_multiplier( false, false );
+    if ( type == pulse_type::NORMAL )
+      am *= arcane_charge_multiplier( false, false );
 
     return am;
   }
@@ -4320,8 +4333,6 @@ struct evocation_t final : public arcane_mage_spell_t
   void execute() override
   {
     arcane_mage_spell_t::execute();
-
-    p()->trigger_arcane_charge(); // might be gone? i dont know. leaving it just to be safe, check later.
 
     if ( is_precombat && execute_state )
       cooldown->adjust( -composite_dot_duration( execute_state ) );
@@ -6530,6 +6541,7 @@ struct touch_of_the_magi_t final : public arcane_mage_spell_t
   {
     parse_options( options_str );
     triggers.clearcasting = true;
+    triggers.touch_of_the_magi = false; // this doesn't trigger damage anyways, keeping it for no actual reason -- ig simply for clarity.
 
     if ( data().ok() )
       add_child( p->action.touch_of_the_magi_explosion );
@@ -6565,15 +6577,6 @@ struct touch_of_the_magi_t final : public arcane_mage_spell_t
     }
   }
 
-  bool ready() override
-  {
-    // assuming you cant cast totm if totm is up on target. giga check this later.
-    if ( get_td( target )->debuffs.touch_of_the_magi->up() )
-      return false;
-
-    return arcane_mage_spell_t::ready();
-  }
-
   // Touch of the Magi will trigger procs that occur only from casting damaging spells.
   bool has_amount_result() const override
   { return true; }
@@ -6586,6 +6589,7 @@ struct touch_of_the_archmage_pulse_t : public arcane_mage_spell_t
   {
     background = proc = true;
     aoe = -1;
+    triggers.touch_of_the_magi = false;
   }
 
   double composite_target_da_multiplier( player_t* target ) const override
@@ -6608,6 +6612,7 @@ struct touch_of_the_archmage_t : public arcane_mage_spell_t
   arcane_mage_spell_t( n, p, p->find_spell( 1258134 ) )
   {
     background = proc = true;
+    triggers.touch_of_the_magi = false; // this doesn't trigger damage anyways, keeping it for no actual reason -- ig simply for clarity.
 
     pulse_action = get_action<touch_of_the_archmage_pulse_t>( "touch_of_the_archmage_pulse", p );
     add_child( pulse_action );
