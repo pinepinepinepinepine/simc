@@ -3559,8 +3559,9 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
     aoe = -1;
     reduced_aoe_targets = 5;
 
-    // can the echo trigger a sphere or clearcasting? check this, assuming it doesnt.
-    triggers.clearcasting = triggers.spellfire_sphere = type == pulse_type::NORMAL;
+    // can the echo trigger clearcasting? check this, assuming it doesnt.
+    triggers.clearcasting = type == pulse_type::NORMAL;
+    triggers.spellfire_sphere = true;
 
     if ( p->talents.reverberate.ok() && type == pulse_type::NORMAL )
     {
