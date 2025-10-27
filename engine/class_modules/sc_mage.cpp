@@ -456,6 +456,8 @@ public:
     double it_clearcasting_chance = 0.0938;
     double blast_clearcasting_chance = 0.0938;
     double blast_it_clearcasting_chance = 0.1618;
+    double sphere_chance = 0.058; // Spellfire Sphere has a random proc rate, as well as a BLP;
+    unsigned sphere_blp = 11;     // combined, they equal to the tooltip's 12% trigger rate. Check if different spells have a higher base proc rate as w/ Blast + CC.
   } options;
 
   // Pets
@@ -553,6 +555,7 @@ public:
     int embedded_splinters;
     int remaining_splinterstorm;
     int clearcasting_blp_count;
+    int sphere_blp_count;
     double totm_snapshot; // hack. GROSS. IS THIS FINE? alternatively i was thinking of just converting this variable's purpose from state to a buff, similarily w/ how totm holds dmg done. idk.
   } state;
 
@@ -2172,12 +2175,15 @@ public:
       }
     }
 
-    // check if stuff like surge / totm / background / whatever can trigger a spellfire sphere.
-    if ( p()->talents.spellfire_spheres.ok() && triggers.spellfire_sphere ) // is there a blp or something?
+    // apparently pulse echo can generate a sphere: is there an icd? 
+    // check what happens if you pulse at the last BLP -> pulse echo randomly procs a sphere. that a thing?
+    if ( p()->talents.spellfire_spheres.ok() && triggers.spellfire_sphere ) // is there a blp or something? THERE IS! check what can increment the BLP.
     {
-      if ( !background && rng().roll( p()->talents.spellfire_spheres->effectN( 1 ).percent() ) )
+      p()->state.sphere_blp_count++;
+      if ( p()->state.sphere_blp_count >= p()->options.sphere_blp || rng().roll( p()->options.sphere_chance ) )
       {
         p()->buffs.spellfire_sphere->trigger();
+        p()->state.sphere_blp_count = 0;
         make_event( *sim, [ this ] { p()->buffs.glorious_incandescence->trigger(); } ); // slight delay as to avoid a singular barrage gaining + consuming gi in the same cast.
       }
     }
@@ -3249,7 +3255,8 @@ struct arcane_orb_t final : public arcane_mage_spell_t
     parse_options( options_str );
     may_miss = false;
     aoe = -1;
-    triggers.clearcasting = triggers.spellfire_sphere = type != ao_type::ORB_BARRAGE;
+    triggers.clearcasting = type != ao_type::ORB_BARRAGE; 
+    // apparently orb doesn't play a single bit into spellfire spheres. check if orb mastery triggers clearcasting.
 
     std::string_view bolt_name;
     switch ( type )
@@ -3374,6 +3381,13 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
 
     p()->buffs.arcane_tempo->trigger();
     p()->buffs.arcane_charge->expire();
+
+    // With 0 stacks of Salvo, Salvo is gained AFTER the Barrage;
+    // however, with non-zero stacks of Salvo, Salvo is gained before the execution, to subsequently be consumed with the upcoming Barrage.
+    if ( p()->buffs.arcane_salvo->check() )
+      p()->trigger_arcane_salvo();
+    else
+      make_event( *sim, [ this ] { p()->trigger_arcane_salvo(); } );
 
     // ok so SINCE orb barrage GETS EXECUTED FIRST, and CASTS of ORB BARRAGE (CURRENTLY, IN THIS SIM) grant SALVO, if orb barrage gets procced w/ barrage at 4 salvo, it'll +1 (or +2 w/ expanded mind),
     // allowing force of will to trigger a splinter because now we're at 5/6 salvo by the time we get here.
@@ -3916,6 +3930,7 @@ struct arcane_surge_t final : public arcane_mage_spell_t
     aoe = -1;
     affected_by.savant = true;
     reduced_aoe_targets = data().effectN( 3 ).base_value();
+    triggers.spellfire_sphere = true;
   }
 
   timespan_t travel_time() const override
@@ -7518,6 +7533,8 @@ void mage_t::create_options()
   add_option( opt_float( "mage.it_clearcasting_chance", options.it_clearcasting_chance ) );
   add_option( opt_float( "mage.blast_clearcasting_chance", options.blast_clearcasting_chance ) );
   add_option( opt_float( "mage.blast_it_clearcasting_chance", options.blast_it_clearcasting_chance ) );
+  add_option( opt_float( "mage.sphere_chance", options.sphere_chance ) );
+  add_option( opt_uint( "mage.sphere_blp", options.sphere_blp ) );
   player_t::create_options();
 }
 
@@ -8894,6 +8911,12 @@ std::unique_ptr<expr_t> mage_t::create_expression( std::string_view name )
   {
     return make_fn_expr( name, [ this ]
     { return 13 - state.clearcasting_blp_count; } );
+  }
+
+  if ( util::str_compare_ci( name, "sphere_blp_remains" ) )
+  {
+    return make_fn_expr( name, [ this ]
+    { return 11 - state.sphere_blp_count; } );
   }
 
   auto splits = util::string_split<std::string_view>( name, "." );
