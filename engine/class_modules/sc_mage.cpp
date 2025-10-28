@@ -306,7 +306,7 @@ public:
     {
       std::unique_ptr<buff_stack_benefit_t> arcane_barrage;
       std::unique_ptr<buff_stack_benefit_t> arcane_blast;
-      std::unique_ptr<buff_stack_benefit_t> arcane_pulse; // i genuinely have no idea what arcane_charge_benefits does
+      std::unique_ptr<buff_stack_benefit_t> arcane_pulse; // me: i genuinely have no idea what arcane_charge_benefits does
     } arcane_charge;
   } benefits;
 
@@ -556,7 +556,7 @@ public:
     int remaining_splinterstorm;
     int clearcasting_blp_count;
     int sphere_blp_count;
-    double totm_snapshot; // hack. GROSS. IS THIS FINE? alternatively i was thinking of just converting this variable's purpose from state to a buff, similarily w/ how totm holds dmg done. idk.
+    double totm_snapshot; // me: hack. GROSS. IS THIS FINE? alternatively i was thinking of just converting this variable's purpose from state to a buff, similarily w/ how totm holds dmg done. idk.
   } state;
 
   struct expression_support_t
@@ -1309,7 +1309,7 @@ struct arcane_phoenix_spell_t : public mage_pet_spell_t
     if ( is_mage_spell )
     {
       c += o()->buffs.combustion->check_value();
-      // c += o()->buffs.overflowing_energy->check_stack_value(); leaving this here as a cookie trail because ive no clue if phoenix's barrage is relevant for overflowing energy
+      // me: c += o()->buffs.overflowing_energy->check_stack_value(); leaving this here as a cookie trail because ive no clue if phoenix's barrage is relevant for overflowing energy
     }
 
     return c;
@@ -1429,10 +1429,10 @@ struct arcane_phoenix_pet_t final : public mage_pet_t
     }
     else
     {
-      o()->buffs.arcane_soul->trigger(); // this is a little silly, but im just keeping buff_duration and its stuff above because i don't wanna remove fire related thingies... just to be safe.
+      o()->buffs.arcane_soul->trigger(); // me: this is a little silly, but im just keeping buff_duration and its stuff above because i don't wanna remove fire related thingies... just to be safe.
     }
 
-    o()->buffs.flame_quills->trigger(); // leaving this here because its chance is tied to tier, not sure if we care about supporting old tier sets into another expansion.
+    o()->buffs.flame_quills->trigger(); // me: leaving this here because its chance is tied to tier, not sure if we care about supporting old tier sets into another expansion.
     o()->buffs.lesser_time_warp->trigger();
   };
 
@@ -2175,8 +2175,8 @@ public:
       }
     }
 
-    // apparently pulse echo can generate a sphere: is there an icd? 
-    // check what happens if you pulse at the last BLP -> pulse echo randomly procs a sphere. that a thing?
+    // me: apparently pulse echo can generate a sphere: is there an icd? 
+    // me: check what happens if you pulse at the last BLP -> pulse echo randomly procs a sphere. that a thing?
     if ( p()->talents.spellfire_spheres.ok() && triggers.spellfire_sphere ) // is there a blp or something? THERE IS! check what can increment the BLP.
     {
       p()->state.sphere_blp_count++;
@@ -2184,7 +2184,7 @@ public:
       {
         p()->buffs.spellfire_sphere->trigger();
         p()->state.sphere_blp_count = 0;
-        make_event( *sim, [ this ] { p()->buffs.glorious_incandescence->trigger(); } ); // slight delay as to avoid a singular barrage gaining + consuming gi in the same cast.
+        make_event( *sim, [ this ] { p()->buffs.glorious_incandescence->trigger(); } ); // me: slight delay as to avoid a singular barrage gaining + consuming gi in the same cast.
       }
     }
 
@@ -2550,13 +2550,13 @@ struct arcane_mage_spell_t : public mage_spell_t
 
   double arcane_charge_multiplier( bool arcane_barrage = false, bool utilizes_mastery = true ) const
   {
-    double per_charge = p()->buffs.arcane_charge->data().effectN( arcane_barrage ? 2 : 1 ).percent(); // pulse and blast share an id.
+    double per_charge = p()->buffs.arcane_charge->data().effectN( arcane_barrage ? 2 : 1 ).percent(); // me: pulse and blast share an id.
 
     if ( utilizes_mastery ) // Arcane Charges affecting Arcane Pulse don't benefit from Mastery(?). Test this to see if its actually real in game.
       per_charge += p()->cache.mastery() * p()->spec.savant->effectN( arcane_barrage ? 3 : 2 ).mastery_value() *
                    ( 1.0 + p()->talents.prodigious_savant->effectN( arcane_barrage ? 2 : 1 ).percent() );
     
-    per_charge += p()->talents.touch_of_the_archmage_two->effectN( 1 ).percent(); // no clue how prod savant/mastery plays into this. check later.
+    per_charge += p()->talents.touch_of_the_archmage_two->effectN( 1 ).percent(); // me: no clue how prod savant/mastery plays into this. check later.
 
     return 1.0 + p()->buffs.arcane_charge->check() * per_charge;
   }
@@ -3256,7 +3256,7 @@ struct arcane_orb_t final : public arcane_mage_spell_t
     may_miss = false;
     aoe = -1;
     triggers.clearcasting = type != ao_type::ORB_BARRAGE; 
-    // apparently orb doesn't play a single bit into spellfire spheres. check if orb mastery triggers clearcasting.
+    // me: apparently orb doesn't play a single bit into spellfire spheres. check if orb mastery triggers clearcasting.
 
     std::string_view bolt_name;
     switch ( type )
@@ -3300,8 +3300,8 @@ struct arcane_orb_t final : public arcane_mage_spell_t
 
     if ( p()->talents.orb_mastery.ok() && p()->buffs.clearcasting->check() && type == ao_type::NORMAL )
     {
-      p()->buffs.clearcasting->decrement(); // not sure if orb consuming cc impacts mana cost. check later.
-      make_repeating_event( *sim, 100_ms, [ this ] { orb_mastery->execute_on_target( target ); }, p()->talents.orb_mastery->effectN( 1 ).base_value() ); // check if its 100_ms, if its instant, or whatever. huge assumption atm.
+      p()->buffs.clearcasting->decrement(); // me: not sure if orb consuming cc impacts mana cost. check later.
+      make_repeating_event( *sim, 100_ms, [ this ] { orb_mastery->execute_on_target( target ); }, p()->talents.orb_mastery->effectN( 1 ).base_value() ); // me: check if its 100_ms, if its instant, or whatever. huge assumption atm.
     }
   }
 
@@ -3324,7 +3324,7 @@ struct arcane_orb_t final : public arcane_mage_spell_t
         p()->trigger_arcane_salvo( p()->talents.electrostatic_orb->effectN( 3 ).base_value() );
     }
   }
-}; // check if salvo is gained from other types of orb
+}; // me: check if salvo is gained from other types of orb
 
 struct arcane_barrage_t final : public arcane_mage_spell_t
 {
@@ -3367,9 +3367,9 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
       {
         orb_barrage->execute_on_target( target );
         // Likely a bug: Arcane Orb procs from Orb Barrage uniquely prevent Barrage from rolling Clearcasting's proc chance, and incrementing its BLP.
-        triggers.clearcasting = false; // test whether or not the same bug occurs in midnight.
+        triggers.clearcasting = false; // me: test whether or not the same bug occurs in midnight.
       }
-    } // if salvo is gained with ANY cast of orb, when casting arcane barrage -> orb barrage procs -> reset salvo due to barrage, will you have leftover salvo FROM the orb even after consuming salvo? check what happens with orb barrage.
+    } // me: if salvo is gained with ANY cast of orb, when casting arcane barrage -> orb barrage procs -> reset salvo due to barrage, will you have leftover salvo FROM the orb even after consuming salvo? check what happens with orb barrage.
 
     p()->benefits.arcane_charge.arcane_barrage->update();
 
@@ -3381,43 +3381,44 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
     p()->buffs.arcane_tempo->trigger();
     p()->buffs.arcane_charge->expire();
 
-    // With 0 stacks of Salvo, Salvo is gained AFTER the Barrage;
+    // With 0 stacks of Salvo, Salvo is gained after the Barrage;
     // however, with non-zero stacks of Salvo, Salvo is gained before the execution, to subsequently be consumed with the upcoming Barrage.
     if ( p()->buffs.arcane_salvo->check() )
       p()->trigger_arcane_salvo();
     else
       make_event( *sim, [ this ] { p()->trigger_arcane_salvo(); } );
 
-    // ok so SINCE orb barrage GETS EXECUTED FIRST, and CASTS of ORB BARRAGE (CURRENTLY, IN THIS SIM) grant SALVO, if orb barrage gets procced w/ barrage at 4 salvo, it'll +1 (or +2 w/ expanded mind),
-    // allowing force of will to trigger a splinter because now we're at 5/6 salvo by the time we get here.
-    // see wtf happens in game, and if force of will behaves as described above in game, put the 2 lines before orb barrage's execution... or snapshot the stacks... or make_event salvo's trigger in orb's execute. i dont know, whatever works.
+    // me: ok so SINCE orb barrage GETS EXECUTED FIRST, and CASTS of ORB BARRAGE (CURRENTLY, IN THIS SIM) grant SALVO, if orb barrage gets procced w/ barrage at 4 salvo, it'll +1 (or +2 w/ expanded mind),
+    // me: allowing force of will to trigger a splinter because now we're at 5/6 salvo by the time we get here.
+    // me: see wtf happens in game, and if force of will behaves as described above in game, put the 2 lines before orb barrage's execution... or snapshot the stacks... or make_event salvo's trigger in orb's execute. i dont know, whatever works.
 
-    // force of will is weird, tooltip isnt properly descriptive, instead it uses a range
-    // 1-4 salvo generates 1 splinter
-    // 5-9, 2 splinters
-    // 10-14, 3
-    // 15-19, 4
-    // 20, 5
-    // doesn't necessarily HAVE to use modulo but it allows the user to override force of will, or it'll work if blizzard changes it ig.
+    // me: force of will is weird, tooltip isnt properly descriptive, instead it uses a range
+    // me: 1-4 salvo generates 1 splinter
+    // me: 5-9, 2 splinters
+    // me: 10-14, 3
+    // me: 15-19, 4
+    // me: 20, 5
+    // me: doesn't necessarily HAVE to use modulo but it allows the user to override force of will, or it'll work if blizzard changes it ig.
     if ( p()->talents.force_of_will.ok() && p()->buffs.arcane_salvo->up() )
     {
         int splinters = std::ceil( p()->buffs.arcane_salvo->check() / p()->talents.force_of_will->effectN( 1 ).base_value() );
         if ( !( p()->buffs.arcane_salvo->check() % as<int>( p()->talents.force_of_will->effectN( 1 ).base_value() ) ) )
           splinters++;
         p()->trigger_splinter( target, splinters );
-    } // new force of will: CHECK IF ITS A RANDOM TARGET.
+    } // me: new force of will: CHECK IF ITS A RANDOM TARGET.
 
     if ( p()->talents.polished_focus.ok() )
     {
+      // Slight delay to avoid Barrage immediately consuming Polished Focus' Salvo from below.
       if ( p()->buffs.arcane_salvo->check() >= p()->talents.polished_focus->effectN( 1 ).base_value() )
-        make_event( *sim, [ this ] { p()->trigger_arcane_salvo( p()->talents.polished_focus->effectN( 2 ).base_value() ); } ); // make_event as to not trigger arcane_salvo, to then immediately consume it below.
+        make_event( *sim, [ this ] { p()->trigger_arcane_salvo( p()->talents.polished_focus->effectN( 2 ).base_value() ); } );
     }
 
     if ( p()->buffs.arcane_soul->check() )
     {
       p()->trigger_clearcasting();
       p()->trigger_arcane_charge( arcane_soul_charges );
-      p()->trigger_arcane_salvo( p()->find_spell( 451038 )->effectN( 2 ).base_value() ); // get this from spell data, 5, new memory of alar talent.
+      p()->trigger_arcane_salvo( p()->find_spell( 451038 )->effectN( 2 ).base_value() );
     } 
     else
     {
@@ -3550,7 +3551,6 @@ struct arcane_explosion_t final : public arcane_mage_spell_t
     affected_by.savant = true;
     triggers.clearcasting = triggers.spellfire_sphere = true;
     cost_reductions = { p->buffs.clearcasting };
-    // does arcane explosion consume clearcasting... with the only added benefit being its free mana cost? ok. check later.
   }
 
   void execute() override
@@ -3569,7 +3569,7 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
     switch ( type )
     {
       case pulse_type::NORMAL:       return p->find_spell( 1241462 );
-      case pulse_type::ECHO:         return p->find_spell( 1241462 ); // actual id should be 1243460, but its apparently not whitelisted. using this id temporarily.
+      case pulse_type::ECHO:         return p->find_spell( 1241462 ); // me: actual id should be 1243460, but its apparently not whitelisted. using this id temporarily.
       default:                       return nullptr;
     }
   }
@@ -3585,7 +3585,7 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
     aoe = -1;
     reduced_aoe_targets = 5;
 
-    // can the echo trigger clearcasting? check this, assuming it doesnt.
+    // me: can the echo trigger clearcasting? check this, assuming it doesnt.
     triggers.clearcasting = type == pulse_type::NORMAL;
     triggers.spellfire_sphere = true;
 
@@ -3601,29 +3601,29 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
 
   void execute() override
   {
-    p()->benefits.arcane_charge.arcane_pulse->update(); // why is this here?
+    p()->benefits.arcane_charge.arcane_pulse->update(); // me: why is this here?
 
     arcane_mage_spell_t::execute();
 
-    // arcane charges triggered by pulse's echo do not benefit from impetus.
+    // Arcane Charges triggered by Reverberate's Echo do not benefit from Impetus.
     auto pulse_charges = p()->talents.arcane_pulse->effectN( 2 ).base_value();
     p()->trigger_arcane_charge( type == pulse_type::NORMAL ? pulse_charges : ( pulse_charges - p()->talents.impetus->effectN( 1 ).base_value() ) );
 
     p()->trigger_arcane_salvo();
-    p()->trigger_splinter( target ); // goes on the target. check if its the spell target, particularily for the random target application s word for its echo
+    p()->trigger_splinter( target ); // me: goes on the target. check if its the spell target, particularily for the random target application s word for its echo
   }
 
   void impact ( action_state_t* s ) override
   {
     arcane_mage_spell_t::impact( s );
 
-    // the trigger_dmg of pulse gets damage multiplied based on shit, like surge or whateva, so it technically gets affected twice. 
-    // CHECK if its like this, or if its no multiplier -- add a dmg flag to apply only to it if so, and its chill.
+    // me: the trigger_dmg of pulse gets damage multiplied based on s word, like surge or whateva, so it technically gets affected twice. 
+    // me: CHECK if its like this, or if its no multiplier -- add a dmg flag to apply only to it if so, and its chill.
     if ( s->chain_target == 0 && type == pulse_type::NORMAL && rng().roll( p()->talents.reverberate->effectN( 1 ).percent() ) )
     {
       make_event( *sim, 150_ms, [ this, trigger_dmg = p()->talents.reverberate->effectN( 2 ).percent() * s->result_total ] 
       {
-        // pulse echo is not executed on the main target, it's executed on one random target which was damaged by the normal pulse.
+        // Echo is executed on a random target damaged by the casted Pulse.
         std::vector<player_t*> tl = pulse_echo->target_list(); 
         rng().shuffle( tl.begin(), tl.end() );
         pulse_echo->execute_on_target( tl[0], trigger_dmg );
@@ -3667,11 +3667,11 @@ struct arcane_assault_t final : public arcane_mage_spell_t
     arcane_mage_spell_t::execute();
 
     // TODO: Proc rate isn't listed anywhere, update as we get more data
-    if ( p()->talents.energized_familiar.ok() && rng().roll( p()->talents.energized_familiar->effectN( 2 ).percent() ) ) // check this later. they changed it from 5% to 6%? was prev. "SMALL CHANCE", now 6%. why?
+    if ( p()->talents.energized_familiar.ok() && rng().roll( p()->talents.energized_familiar->effectN( 2 ).percent() ) ) // me: check this later. they changed it from 5% to 6%? was prev. "SMALL CHANCE", now 6%. why?
       p()->resource_gain( RESOURCE_MANA, p()->resources.max[ RESOURCE_MANA ] * energize_pct, p()->gains.energized_familiar, this );
 
     if ( rng().roll( p()->talents.attuned_familiar->effectN( 1 ).percent() ) )
-      p()->trigger_splinter( target, 1 ); // check if its a random target, also the 1 looks ugly but there's nothing to grab from spell data.
+      p()->trigger_splinter( target, 1 ); // me: check if its a random target, also the 1 looks ugly but there's nothing to grab from spell data.
   }
 };
 
@@ -3714,10 +3714,6 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
     background = proc = true;
     affected_by.savant = true;
     base_aoe_multiplier *= p->talents.aether_attunement->effectN( 1 ).percent();
-    
-    // old implementation is right? check if it uses the one below (75%) or the one above (50%) of base aoe multi for extra targets. assuming rn its 50%
-    //const auto& aa = p->talents.aether_attunement;
-    //( 1.0 + aa->effectN( 4 ).percent() ) / ( 1.0 + aa->effectN( 1 ).percent() ); // claims 50%, is actually 75%? check in midnight if same thing due to talent revamp. weird.
   }
 
   int n_targets() const override
@@ -3729,7 +3725,7 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
 
     custom_state_spell_t::n_targets();
 
-    return p()->talents.aether_attunement->effectN( 2 ).base_value() + 1; // aa is annoying. just check everything.
+    return p()->talents.aether_attunement->effectN( 2 ).base_value() + 1; // me: aa is annoying. just check everything.
   }
 
   void update_state( action_state_t* s, unsigned flags, result_amount_type rt ) override
@@ -3742,11 +3738,9 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
   {
     custom_state_spell_t::execute();
 
-    if ( p()->talents.charged_missiles->ok() && p()->buffs.arcane_charge->check() ) // add a talent checker too
+    if ( p()->talents.charged_missiles->ok() && p()->buffs.arcane_charge->check() )
       p()->buffs.arcane_charge->decrement();
 
-    // I don't know if arcane salvo is triggered on IMPACT or EXECUTE for focusing crystal. leaving it here as a guess.
-    // its also likely that base executing missiles'll grant a stack from the base talent, i don't know. test it.
     p()->trigger_arcane_salvo( p()->talents.focusing_crystal->effectN( 1 ).base_value() ); 
   }
 
@@ -3760,7 +3754,7 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
         p()->trigger_arcane_charge( p()->find_spell( 461524 )->effectN( 1 ).base_value() );
 
       if ( rng().roll( p()->talents.pyrocosm->effectN( 1 ).percent() ) )
-        p()->action.meteorite->execute_on_target( s->target ); // verify this works, should also apply to AA? does this cast the spell at OUR target or the target which missiles hits? particularily for AA. assuming it's s target.
+        p()->action.meteorite->execute_on_target( s->target ); // me: verify this works, should also apply to AA? does this cast the spell at OUR target or the target which missiles hits? particularily for AA. assuming it's s target.
     }
   }
 
@@ -3796,7 +3790,6 @@ struct arcane_missiles_t final : public custom_state_spell_t<arcane_mage_spell_t
     // TODO (10.1.5 PTR): the tick time reduction is in CC while the duration reduction
     // is in Concentrated Power, which doesn't make sense and will presumably be fixed
 
-    // now auto parsed? ok. hopefully this works. check if its as expected later.
     const auto& cc_data = p->buffs.clearcasting_channel->data();
     cc_duration_reduction  = cc_data.effectN( 1 ).percent();
     cc_tick_time_reduction = cc_data.effectN( 2 ).percent();
@@ -3960,7 +3953,7 @@ struct arcane_surge_t final : public arcane_mage_spell_t
     am *= 1.0 + p()->resources.pct( RESOURCE_MANA ) * ( data().effectN( 2 ).base_value() - 1.0 );
 
     am *= 1.0 + ( p()->talents.mana_bomb->effectN( 1 ).percent() * p()->resources.pct( RESOURCE_MANA ) );
-    // i have literally zero idea how mana bomb gets calculated in game. check later. assuming rn its a range w/ how its done above.
+    // me: i have literally zero idea how mana bomb gets calculated in game. check later. assuming rn its a range w/ how its done above.
     return am;
   }
 
@@ -3969,7 +3962,7 @@ struct arcane_surge_t final : public arcane_mage_spell_t
     p()->trigger_splinter( target, as<int>( p()->talents.augury_abounds->effectN( 1 ).base_value() ) );
 
     // Clear any existing surge buffs to trigger the DF2 4pc buff.
-    p()->buffs.arcane_surge->expire(); // can probs remove this due to the removal of time anomaly
+    p()->buffs.arcane_surge->expire(); // me: can probs remove this due to the removal of time anomaly
     timespan_t bonus_duration = p()->buffs.spellfire_sphere->check() * p()->talents.savor_the_moment->effectN( 1 ).time_value();
     timespan_t arcane_surge_duration = p()->buffs.arcane_surge->buff_duration() + bonus_duration;
     p()->buffs.arcane_surge->trigger( arcane_surge_duration );
@@ -3999,7 +3992,7 @@ struct arcane_surge_t final : public arcane_mage_spell_t
   }
 };
 
-struct blink_t final : public mage_spell_t // if shimmer spawns blast wave or mirrors similarily w/ blink... then ig it might be a thing to implement in. awful.
+struct blink_t final : public mage_spell_t // me: shimmer APPARENTLY triggers blast wave + mirrors. guh. do it.
 {
   blink_t( std::string_view n, mage_t* p, std::string_view options_str ) :
     mage_spell_t( n, p, p->find_class_spell( "Blink" ) )
@@ -4346,7 +4339,7 @@ struct evocation_t final : public arcane_mage_spell_t
     // When Evocation is used from the precombat action list, do not start the channel.
     // Just trigger the appropriate buffs and bail out.
 
-    // this fine w/ the removal of siphon storm? kinda weird.
+    // me: this fine w/ the removal of siphon storm? kinda weird.
     if ( !is_precombat )
     {
       arcane_mage_spell_t::trigger_dot( s );
@@ -6569,7 +6562,7 @@ struct touch_of_the_magi_t final : public arcane_mage_spell_t
   {
     parse_options( options_str );
     triggers.clearcasting = true;
-    triggers.touch_of_the_magi = false; // this doesn't trigger damage anyways, keeping it for no actual reason -- ig simply for clarity.
+    triggers.touch_of_the_magi = false; // me: this doesn't trigger damage anyways, keeping it for no actual reason -- ig simply for clarity.
 
     if ( data().ok() )
       add_child( p->action.touch_of_the_magi_explosion );
@@ -6622,8 +6615,8 @@ struct touch_of_the_archmage_pulse_t : public arcane_mage_spell_t
 
   double composite_target_da_multiplier( player_t* target ) const override
   {
-    // HUGE check later.
-    double m = 1.0; // need to see what actually affects this damage. 
+    // me: HUGE check later.
+    double m = 1.0; // me: need to see what actually affects this damage. 
 
     if ( p()->get_target_data( target )->debuffs.touch_of_the_archmage->check() )
       m *= 1.0 + p()->talents.touch_of_the_archmage_three->effectN( 2 ).percent();
@@ -6640,7 +6633,7 @@ struct touch_of_the_archmage_t : public arcane_mage_spell_t
   arcane_mage_spell_t( n, p, p->find_spell( 1258134 ) )
   {
     background = proc = true;
-    triggers.touch_of_the_magi = false; // this doesn't trigger damage anyways, keeping it for no actual reason -- ig simply for clarity.
+    triggers.touch_of_the_magi = false; // me: this doesn't trigger damage anyways, keeping it for no actual reason -- ig simply for clarity.
 
     pulse_action = get_action<touch_of_the_archmage_pulse_t>( "touch_of_the_archmage_pulse", p );
     add_child( pulse_action );
@@ -6651,7 +6644,7 @@ struct touch_of_the_archmage_t : public arcane_mage_spell_t
     arcane_mage_spell_t::tick( d );
 
     pulse_action->execute_on_target( target, ( p()->state.totm_snapshot * p()->find_spell( 1257950 )->effectN( 1 ).percent() ) / 6  ); 
-    // 6 is the amount of pulses. not sure how to grab touch of the archmage's max duration / id 1258134's "every 1 second"
+    // me: 6 is the amount of pulses. not sure how to grab touch of the archmage's max duration / id 1258134's "every 1 second"
   }
 
   void last_tick( dot_t* d ) override
@@ -7363,7 +7356,7 @@ action_t* mage_t::create_action( std::string_view name, std::string_view options
   if ( talents.frostfire_bolt.ok() && ( name == "fireball" || name == "frostbolt" ) )
     return create_action( "frostfire_bolt", options_str );
 
-  if ( talents.arcane_pulse.ok() && name == "arcane_explosion" ) // i dont know if this is preferable.
+  if ( talents.arcane_pulse.ok() && name == "arcane_explosion" ) // me: i dont know if this is preferable.
     return create_action( "arcane_pulse", options_str );
 
   // Arcane
@@ -8213,7 +8206,7 @@ void mage_t::create_buffs()
                                ->set_chance( talents.deaths_chill.ok() );
   buffs.fingers_of_frost   = make_buff( this, "fingers_of_frost", find_spell( 44544 ) );
   buffs.freezing_rain      = make_buff( this, "freezing_rain", find_spell( 270232 ) )
-                               // ->set_default_value_from_effect( 2 ) out of range, commenting it out.
+                               // ->set_default_value_from_effect( 2 ) out of range, commenting it out. me:
                                ->set_chance( talents.freezing_rain.ok() );
   buffs.frigid_empowerment = make_buff( this, "frigid_empowerment", find_spell( 417488 ) )
                                ->set_default_value_from_effect( 1 );
@@ -9188,7 +9181,7 @@ void mage_t::trigger_flash_freezeburn( bool ffb )
     make_event( *sim, 15_ms, [ this ] { buffs.frostfire_empowerment->execute(); } );
 }
 
-void mage_t::trigger_spellfire_spheres() // don't think this has to be here anymore, converted it to be a trigger, removed all traces of it for arcane, but not for fire. so, yeah.
+void mage_t::trigger_spellfire_spheres() // me: don't think this has to be here anymore, converted it to be a trigger, removed all traces of it for arcane, but not for fire. so, yeah.
 {
   if ( !talents.spellfire_spheres.ok() )
     return;
@@ -9217,7 +9210,7 @@ void mage_t::trigger_spellfire_spheres() // don't think this has to be here anym
 }
 
 // If the target isn't specified, picks a random target.
-void mage_t::trigger_splinter( player_t* target, int count ) // check if new splinter generation is random or main/impact target.
+void mage_t::trigger_splinter( player_t* target, int count ) // me: check if new splinter generation is random or main/impact target.
 {
   if ( !talents.splintering_sorcery.ok() || count == 0 )
     return;
