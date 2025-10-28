@@ -3329,7 +3329,6 @@ struct arcane_orb_t final : public arcane_mage_spell_t
 struct arcane_barrage_t final : public arcane_mage_spell_t
 {
   action_t* orb_barrage = nullptr;
-  action_t* rebound = nullptr;
   int snapshot_charges = -1;
   int arcane_soul_charges = 0;
 
@@ -3392,8 +3391,21 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
     // ok so SINCE orb barrage GETS EXECUTED FIRST, and CASTS of ORB BARRAGE (CURRENTLY, IN THIS SIM) grant SALVO, if orb barrage gets procced w/ barrage at 4 salvo, it'll +1 (or +2 w/ expanded mind),
     // allowing force of will to trigger a splinter because now we're at 5/6 salvo by the time we get here.
     // see wtf happens in game, and if force of will behaves as described above in game, put the 2 lines before orb barrage's execution... or snapshot the stacks... or make_event salvo's trigger in orb's execute. i dont know, whatever works.
-    if ( p()->talents.force_of_will.ok() )
-      p()->trigger_splinter( target, ( p()->buffs.arcane_salvo->check() / p()->talents.force_of_will->effectN( 1 ).base_value() )  ); // new force of will: CHECK IF ITS A RANDOM TARGET. implicit conversion works.
+
+    // force of will is weird, tooltip isnt properly descriptive, instead it uses a range
+    // 1-4 salvo generates 1 splinter
+    // 5-9, 2 splinters
+    // 10-14, 3
+    // 15-19, 4
+    // 20, 5
+    // doesn't necessarily HAVE to use modulo but it allows the user to override force of will, or it'll work if blizzard changes it ig.
+    if ( p()->talents.force_of_will.ok() && p()->buffs.arcane_salvo->up() )
+    {
+        int splinters = std::ceil( p()->buffs.arcane_salvo->check() / p()->talents.force_of_will->effectN( 1 ).base_value() );
+        if ( !( p()->buffs.arcane_salvo->check() % as<int>( p()->talents.force_of_will->effectN( 1 ).base_value() ) ) )
+          splinters++;
+        p()->trigger_splinter( target, splinters );
+    } // new force of will: CHECK IF ITS A RANDOM TARGET.
 
     if ( p()->talents.polished_focus.ok() )
     {
