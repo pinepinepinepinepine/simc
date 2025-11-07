@@ -9213,10 +9213,8 @@ void mage_t::trigger_spellfire_spheres() // me: don't think this has to be here 
 // If the target isn't specified, picks a random target.
 void mage_t::trigger_splinter( player_t* target, int count ) // me: check if new splinter generation is random or main/impact target.
 {
-  sim->print_debug("entering splinter: {}", count );
   if ( !talents.splintering_sorcery.ok() || count == 0 )
     return;
-  sim->print_debug("passed splinter check: {}", count );
 
   // Splinters don't fire if the target isn't a valid enemy
   if ( target && ( !target->is_enemy() || target->is_sleeping() ) )
