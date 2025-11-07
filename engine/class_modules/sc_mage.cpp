@@ -3736,6 +3736,10 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
       p()->buffs.arcane_charge->decrement();
 
     p()->trigger_arcane_salvo( p()->talents.focusing_crystal->effectN( 1 ).base_value() );
+
+    // me: new pyrocosm, guessing its on every base missile tick execute, equally likely it'll be on impact but only applies to the initial target. also if this WAS able to trigger on any target hit by any instance of the tick impact, where do meteorites go now? check later.
+    if ( rng().roll( p()->talents.pyrocosm->effectN( 1 ).percent() ) )
+      p()->trigger_meteorite( target ); // me: verify this works, should also apply to AA? does this cast the spell at OUR target or the target which missiles hits? particularily for AA. assuming it's s target. also, delay?
   }
 
   void impact( action_state_t* s ) override
@@ -3911,15 +3915,6 @@ struct arcane_missiles_t final : public custom_state_spell_t<arcane_mage_spell_t
   {
     custom_state_spell_t::last_tick( d );
     channel_finish();
-  }
-
-  void tick( dot_t* d ) override
-  {
-    custom_state_spell_t::tick( d );
-
-    // me: new pyrocosm, guessing its on every base missile tick execute, equally likely it'll be on impact but only applies to the initial target. also if this WAS able to trigger on any target hit by any instance of the tick impact, where do meteorites go now? check later.
-    if ( rng().roll( p()->talents.pyrocosm->effectN( 1 ).percent() ) )
-      p()->trigger_meteorite( target ); // me: verify this works, should also apply to AA? does this cast the spell at OUR target or the target which missiles hits? particularily for AA. assuming it's s target. also, delay?
   }
 };
 
