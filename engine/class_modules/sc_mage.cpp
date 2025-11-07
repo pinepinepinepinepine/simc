@@ -1028,6 +1028,7 @@ public:
   void trigger_flash_freezeburn( bool ffb = false );
   void trigger_spellfire_spheres();
   void trigger_splinter( player_t* target, int count = -1 );
+  void trigger_meteorite( player_t* target, int count = 1, timespan_t delay = 0_ms ); // me: check delay properly.
   void trigger_time_manipulation();
   void trigger_jackpot( bool guaranteed = false );
   void trigger_arcane_salvo( int stacks = -1 );
@@ -2184,7 +2185,6 @@ public:
       {
         p()->buffs.spellfire_sphere->trigger();
         p()->state.sphere_blp_count = 0;
-        make_event( *sim, [ this ] { p()->buffs.glorious_incandescence->trigger(); } ); // me: slight delay as to avoid a singular barrage gaining + consuming gi in the same cast.
       }
     }
 
@@ -3399,13 +3399,20 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
     // me: 15-19, 4
     // me: 20, 5
     // me: doesn't necessarily HAVE to use modulo but it allows the user to override force of will, or it'll work if blizzard changes it ig.
-    if ( p()->talents.force_of_will.ok() && p()->buffs.arcane_salvo->up() )
+    // me: new glorious incan, 11/06: assuming it works EXACTLY as above w/ force of will. check later.
+    if ( p()->buffs.arcane_salvo->up() && ( p()->talents.force_of_will.ok() || p()->talents.glorious_incandescence.ok() ) )
     {
-        int splinters = std::ceil( p()->buffs.arcane_salvo->check() / p()->talents.force_of_will->effectN( 1 ).base_value() );
-        if ( !( p()->buffs.arcane_salvo->check() % as<int>( p()->talents.force_of_will->effectN( 1 ).base_value() ) ) )
-          splinters++;
-        p()->trigger_splinter( target, splinters );
-    } // me: new force of will: CHECK IF ITS A RANDOM TARGET.
+      int frequency = p()->talents.force_of_will.ok() ?
+        p()->talents.force_of_will->effectN( 1 ).base_value() : p()->talents.glorious_incandescence->effectN( 4 ).base_value(); // me: can just add them together because one of them will always be zero, but its kinda ugly looking
+      int amount = std::ceil( p()->buffs.arcane_salvo->check() / as<double>( frequency ) ); // me: temu logic where it's doing integer division, casting it to double to avoid it.
+      if ( !( p()->buffs.arcane_salvo->check() % frequency ) )
+        amount++;
+
+      // me: they've ifs checking for talents within em, leaving it like this if it's fine.
+      // me: check if meteorites spawn after one another w/ some delay, assuming it's 75ms because thats what trigger_gi is using.
+      p()->trigger_splinter( target, amount ); // me: also there's probably some delay with splinters. check later.
+      p()->trigger_meteorite( target, amount, 75_ms );
+    } // me: new force of will AND gi: CHECK IF ITS A RANDOM TARGET.
 
     if ( p()->talents.polished_focus.ok() )
     {
@@ -3426,12 +3433,6 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
     }
 
     p()->trigger_mana_cascade();
-
-    if ( p()->buffs.glorious_incandescence->check() )
-    {
-      p()->buffs.glorious_incandescence->decrement();
-      p()->state.trigger_glorious_incandescence = true;
-    }
 
     snapshot_charges = -1;
   }
@@ -3467,13 +3468,6 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
     am *= 1.0 + p()->buffs.arcane_salvo->check_stack_value();
 
     return am;
-  }
-
-  void impact( action_state_t* s ) override
-  {
-    arcane_mage_spell_t::impact( s );
-    if ( result_is_hit( s->result ) )
-      trigger_glorious_incandescence( s->target );
   }
 };
 
@@ -3741,7 +3735,7 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
     if ( p()->talents.charged_missiles->ok() && p()->buffs.arcane_charge->check() )
       p()->buffs.arcane_charge->decrement();
 
-    p()->trigger_arcane_salvo( p()->talents.focusing_crystal->effectN( 1 ).base_value() ); 
+    p()->trigger_arcane_salvo( p()->talents.focusing_crystal->effectN( 1 ).base_value() );
   }
 
   void impact( action_state_t* s ) override
@@ -3752,9 +3746,6 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
     {
       if ( rng().roll( p()->talents.high_voltage->effectN( 1 ).percent() ) )
         p()->trigger_arcane_charge( p()->find_spell( 461524 )->effectN( 1 ).base_value() );
-
-      if ( rng().roll( p()->talents.pyrocosm->effectN( 1 ).percent() ) )
-        p()->action.meteorite->execute_on_target( s->target ); // me: verify this works, should also apply to AA? does this cast the spell at OUR target or the target which missiles hits? particularily for AA. assuming it's s target.
     }
   }
 
@@ -3920,6 +3911,15 @@ struct arcane_missiles_t final : public custom_state_spell_t<arcane_mage_spell_t
   {
     custom_state_spell_t::last_tick( d );
     channel_finish();
+  }
+
+  void tick( dot_t* d ) override
+  {
+    custom_state_spell_t::tick( d );
+
+    // me: new pyrocosm, guessing its on every base missile tick execute, equally likely it'll be on impact but only applies to the initial target. also if this WAS able to trigger on any target hit by any instance of the tick impact, where do meteorites go now? check later.
+    if ( rng().roll( p()->talents.pyrocosm->effectN( 1 ).percent() ) )
+      p()->trigger_meteorite( target ); // me: verify this works, should also apply to AA? does this cast the spell at OUR target or the target which missiles hits? particularily for AA. assuming it's s target. also, delay?
   }
 };
 
@@ -5995,7 +5995,8 @@ struct meteorite_t final : public mage_spell_t
   {
     mage_spell_t::impact( s );
 
-    p()->trigger_arcane_salvo( p()->talents.pyrocosm->effectN( 3 ).base_value() );
+    // me: surely its actually 5%. check if its true + its delay.
+    p()->trigger_clearcasting( p()->talents.pyrocosm->effectN( 5 ).percent() );
   }
 };
 
@@ -9212,8 +9213,10 @@ void mage_t::trigger_spellfire_spheres() // me: don't think this has to be here 
 // If the target isn't specified, picks a random target.
 void mage_t::trigger_splinter( player_t* target, int count ) // me: check if new splinter generation is random or main/impact target.
 {
+  sim->print_debug("entering splinter: {}", count );
   if ( !talents.splintering_sorcery.ok() || count == 0 )
     return;
+  sim->print_debug("passed splinter check: {}", count );
 
   // Splinters don't fire if the target isn't a valid enemy
   if ( target && ( !target->is_enemy() || target->is_sleeping() ) )
@@ -9238,6 +9241,16 @@ void mage_t::trigger_splinter( player_t* target, int count ) // me: check if new
       make_event( *sim, [ this, t = t_ ] { action.splinter->execute_on_target( t ); } );
     }
   }
+}
+
+// me: should i just change trigger_gi?
+void mage_t::trigger_meteorite( player_t* t, int count, timespan_t delay )
+{
+  if ( !talents.glorious_incandescence.ok() || !count )
+    return;
+
+  // me: check if the initial meteorite is triggered instantly (as w/ trigger_gi ), if its all 75ms, and if it's on barr execute/impact
+  make_repeating_event( *sim, delay, [ this, t ] { action.meteorite->execute_on_target( t ); }, count );
 }
 
 bool mage_t::trigger_clearcasting( double chance, timespan_t delay, bool never_predictable, bool precombat_evocation )
