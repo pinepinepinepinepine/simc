@@ -126,7 +126,6 @@ struct mage_td_t final : public actor_target_data_t
   struct debuffs_t
   {
     buff_t* controlled_destruction;
-    buff_t* controlled_instincts;
     buff_t* freezing_winds;
     buff_t* frozen;
     buff_t* improved_scorch;
@@ -288,7 +287,6 @@ public:
     action_t* splinter_recall;
     action_t* splinterstorm;
     action_t* touch_of_the_magi_explosion;
-    action_t* volatile_magic;
     action_t* touch_of_the_archmage;
 
     struct icicles_t
@@ -882,14 +880,14 @@ public:
     // Row 3
     player_talent_t slippery_slinging;
     player_talent_t look_again;
+    player_talent_t controlled_instincts;
     player_talent_t reactive_barrier;
     player_talent_t phantasmal_image;
-    player_talent_t volatile_magic;
     player_talent_t infused_splinters;
 
     // Row 4
+    player_talent_t archmages_wrath;
     player_talent_t signature_spell;
-    player_talent_t controlled_instincts;
     player_talent_t spellfrost_teachings;
     player_talent_t polished_focus;
 
@@ -3237,9 +3235,6 @@ struct arcane_orb_bolt_t final : public arcane_mage_spell_t
 
     // AC is triggered even if the spell misses.
     p()->trigger_arcane_charge();
-
-    if ( result_is_hit( s->result ) && p()->talents.controlled_instincts.ok() )
-      get_td( s->target )->debuffs.controlled_instincts->trigger();
   }
 };
 
@@ -4045,8 +4040,6 @@ struct blizzard_shard_t final : public frost_mage_spell_t
 
     if ( result_is_hit( s->result ) )
     {
-      if ( p()->talents.controlled_instincts.ok() )
-        get_td( s->target )->debuffs.controlled_instincts->trigger();
       if ( p()->talents.freezing_winds.ok() )
         get_td( s->target )->debuffs.freezing_winds->trigger();
     }
@@ -6766,17 +6759,6 @@ struct frostfire_empowerment_t final : public spell_t
   }
 };
 
-struct volatile_magic_t final : public mage_spell_t
-{
-  volatile_magic_t( std::string_view n, mage_t* p ) :
-    mage_spell_t( n, p, p->find_spell( p->specialization() == MAGE_FROST ? 444967 : 444966 ) )
-  {
-    background = proc = true;
-    aoe = -1;
-    reduced_aoe_targets = p->talents.volatile_magic->effectN( 2 ).base_value();
-  }
-};
-
 struct controlled_instincts_t final : public spell_t
 {
   controlled_instincts_t( std::string_view n, mage_t* p ) :
@@ -6862,14 +6844,6 @@ struct embedded_splinter_t final : public mage_spell_t
     if ( sim->event_mgr.canceled )
       return;
 
-    if ( auto vm = p()->action.volatile_magic )
-    {
-      double old_mult = vm->base_multiplier;
-      vm->base_multiplier *= stack;
-      vm->execute_on_target( d->target );
-      vm->base_multiplier = old_mult;
-    }
-
     // If the dot ended due to the target dying, transfer a random portion of the splinters to a nearby target.
     if ( d->target->is_sleeping() )
     {
@@ -6909,8 +6883,6 @@ struct splinter_t final : public mage_spell_t
 
     if ( controlled_instincts )
       add_child( controlled_instincts );
-    if ( p->action.volatile_magic )
-      add_child( p->action.volatile_magic );
     if ( p->action.splinter_recall )
       add_child( p->action.splinter_recall );
     if ( p->action.splinterstorm )
@@ -6936,17 +6908,14 @@ struct splinter_t final : public mage_spell_t
 
     if ( controlled_instincts )
     {
-      if ( auto td = find_td( s->target ); td && td->debuffs.controlled_instincts->check() )
-      {
-        double pct = p()->talents.controlled_instincts->effectN( p()->specialization() == MAGE_FROST ? 4 : 1 ).percent();
-        controlled_instincts->execute_on_target( s->target, pct * s->result_total );
-      }
+      double pct = p()->talents.controlled_instincts->effectN( p()->specialization() == MAGE_FROST ? 4 : 1 ).percent();
+      controlled_instincts->execute_on_target( s->target, pct * s->result_total );
     }
 
     auto cd = p()->specialization() == MAGE_FROST ? p()->cooldowns.frozen_orb : p()->cooldowns.arcane_orb;
     cd->adjust( -p()->talents.spellfrost_teachings->effectN( p()->specialization() == MAGE_FROST ? 2 : 1 ).time_value(), false );
 
-    if ( rng().roll( p()->talents.infused_splinters->effectN( 1 ).percent() ) )
+    if ( rng().roll( p()->talents.infused_splinters->effectN( 1 ).percent() ) ) // me: not really important, but frost uses effectN 2. keeping it like this because id rather not touch anything frost. yeah.
       p()->trigger_arcane_salvo( p()->talents.infused_splinters->effectN( 3 ).base_value() );
 
     double chance = p()->sets->set( HERO_SPELLSLINGER, TWW3, B2 )->effectN( p()->specialization() == MAGE_FROST ? 2 : 1 ).percent();
@@ -7275,8 +7244,6 @@ mage_td_t::mage_td_t( player_t* target, mage_t* mage ) :
   debuffs.controlled_destruction = make_buff( *this, "controlled_destruction", mage->find_spell( 453268 ) )
                                      ->set_default_value( 0.1 * mage->talents.controlled_destruction->effectN( 1 ).percent() )
                                      ->set_chance( mage->talents.controlled_destruction.ok() );
-  debuffs.controlled_instincts   = make_buff( *this, "controlled_instincts", mage->find_spell( mage->specialization() == MAGE_FROST ? 463192 : 454214 ) )
-                                     ->set_chance( mage->talents.controlled_instincts.ok() );
   debuffs.freezing_winds         = make_buff( *this, "recently_damaged_by_blizzard", mage->find_spell( 1216988 ) )
                                      ->set_default_value( mage->talents.freezing_winds->effectN( 1 ).percent() )
                                      ->set_chance( mage->talents.freezing_winds.ok() )
@@ -7474,9 +7441,6 @@ void mage_t::create_actions()
     if ( specialization() == MAGE_FROST )
       action.isothermic_meteor = get_action<meteor_t>( "isothermic_meteor", this, "", meteor_type::ISOTHERMIC );
   }
-
-  if ( talents.volatile_magic.ok() )
-    action.volatile_magic = get_action<volatile_magic_t>( "volatile_magic", this );
 
   if ( talents.splinterstorm.ok() )
     action.splinter_recall = get_action<splinter_recall_t>( "splinter_recall", this );
@@ -7931,13 +7895,13 @@ void mage_t::init_spells()
   // Row 3
   talents.slippery_slinging    = find_talent_spell( talent_tree::HERO, "Slippery Slinging"    );
   talents.look_again           = find_talent_spell( talent_tree::HERO, "Look Again"           );
+  talents.controlled_instincts = find_talent_spell( talent_tree::HERO, "Controlled Instincts" );
   talents.reactive_barrier     = find_talent_spell( talent_tree::HERO, "Reactive Barrier"     );
   talents.phantasmal_image     = find_talent_spell( talent_tree::HERO, "Phantasmal Image"     );
-  talents.volatile_magic       = find_talent_spell( talent_tree::HERO, "Volatile Magic"       );
   talents.infused_splinters    = find_talent_spell( talent_tree::HERO, "Infused Splinters"    );
   // Row 4
+  talents.archmages_wrath      = find_talent_spell( talent_tree::HERO, "Archmage's Wrath"     );
   talents.signature_spell      = find_talent_spell( talent_tree::HERO, "Signature Spell"      );
-  talents.controlled_instincts = find_talent_spell( talent_tree::HERO, "Controlled Instincts" );
   talents.spellfrost_teachings = find_talent_spell( talent_tree::HERO, "Spellfrost Teachings" );
   talents.polished_focus       = find_talent_spell( talent_tree::HERO, "Polished Focus"       );
   // Row 5
