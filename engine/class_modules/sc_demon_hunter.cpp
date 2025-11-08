@@ -912,7 +912,14 @@ public:
   // Set Bonus effects
   struct set_bonuses_t
   {
-    const spell_data_t* stars_fury;  // MID Devourer 4pc Energize
+    // Devourer
+    const spell_data_t* stars_fury;  // MID1 Devourer 4pc Energize
+
+    // Havoc
+
+    // Vengeance
+    const spell_data_t* mid1_vengeance_4pc;
+    const spell_data_t* mid1_vengeance_4pc_damage;
     // Auxilliary
   } set_bonuses;
 
@@ -3158,6 +3165,28 @@ struct final_breath_trigger_t : public BASE
   }
 };
 
+template <typename BASE>
+struct student_of_suffering_trigger_t : public BASE
+{
+  using base_t = student_of_suffering_trigger_t<BASE>;
+
+  student_of_suffering_trigger_t( util::string_view n, demon_hunter_t* p, const spell_data_t* s = spell_data_t::nil(),
+                       util::string_view o = {} )
+    : BASE( n, p, s, o )
+  {
+  }
+
+  void execute() override
+  {
+    BASE::execute();
+
+    if ( BASE::p()->talent.scarred.student_of_suffering->ok() )
+    {
+      BASE::p()->buff.student_of_suffering->trigger();
+    }
+  }
+};
+
 struct demon_hunter_heal_t : public demon_hunter_action_t<heal_t>
 {
   demon_hunter_heal_t( util::string_view n, demon_hunter_t* p, const spell_data_t* s = spell_data_t::nil(),
@@ -3637,7 +3666,7 @@ struct disrupt_t : public demon_hunter_spell_t
 
 // Eye Beam =================================================================
 
-struct eye_beam_base_t : public final_breath_trigger_t<demon_hunter_spell_t>
+struct eye_beam_base_t : public student_of_suffering_trigger_t<final_breath_trigger_t<demon_hunter_spell_t>>
 {
   struct eye_beam_tick_t : public demon_hunter_spell_t
   {
@@ -3686,7 +3715,7 @@ struct eye_beam_base_t : public final_breath_trigger_t<demon_hunter_spell_t>
 
     tick_action = p->get_background_action<eye_beam_tick_t>( name_str + "_tick", name_str, p->spec.eye_beam_damage,
                                                              as<int>( data().effectN( 5 ).base_value() ) );
-    tick_action->stats = stats;
+    add_child( tick_action );
 
     // Add damage modifiers in eye_beam_tick_t, not here.
   }
@@ -3860,8 +3889,8 @@ struct fel_devastation_t : public final_breath_trigger_t<demon_hunter_spell_t>
       heal = p->get_background_action<heals::fel_devastation_heal_t>( "fel_devastation_heal" );
     }
 
-    tick_action        = p->get_background_action<fel_devastation_tick_t>( "fel_devastation_tick" );
-    tick_action->stats = stats;
+    tick_action = p->get_background_action<fel_devastation_tick_t>( "fel_devastation_tick" );
+    add_child( tick_action );
   }
 
   void execute() override
@@ -4129,10 +4158,7 @@ struct sigil_of_flame_damage_base_t : public demon_hunter_sigil_t
   void execute() override
   {
     demon_hunter_sigil_t::execute();
-    if ( p()->talent.scarred.student_of_suffering->ok() )
-    {
-      p()->buff.student_of_suffering->trigger();
-    }
+
     if ( hit_any_target && p()->talent.vengeance.cycle_of_binding->ok() )
     {
       trigger_cycle_of_binding_event();
@@ -4567,7 +4593,13 @@ struct immolation_aura_t : public demon_hunter_spell_t
 
       if ( result_is_hit( s->result ) )
       {
-        if ( initial && p()->talent.vengeance.fallout->ok() && rng().roll( 0.60 ) )
+        bool spawn_fallout_soul = false;
+        if ( p()->talent.vengeance.fallout->ok() )
+        {
+          spawn_fallout_soul = s->n_targets == 1 || rng().roll( 0.60 );
+        }
+
+        if ( initial && spawn_fallout_soul )
         {
           p()->spawn_soul_fragment( soul_fragment::LESSER, 1 );
           p()->proc.soul_fragment_from_fallout->occur();
@@ -4646,14 +4678,14 @@ struct immolation_aura_t : public demon_hunter_spell_t
     {
       p->active.immolation_aura = p->get_background_action<immolation_aura_damage_t>(
           "immolation_aura_tick", data().effectN( 1 ).trigger(), false );
-      p->active.immolation_aura->stats = stats;
+      add_child( p->active.immolation_aura );
     }
 
     if ( !p->active.immolation_aura_initial && p->spell.immolation_aura_damage->ok() )
     {
       p->active.immolation_aura_initial = p->get_background_action<immolation_aura_damage_t>(
           "immolation_aura_initial", p->spell.immolation_aura_damage, true );
-      p->active.immolation_aura_initial->stats = stats;
+      add_child( p->active.immolation_aura_initial );
     }
 
     if ( p->talent.demon_hunter.infernal_armor->ok() && !p->active.infernal_armor )
@@ -5157,8 +5189,8 @@ struct spirit_bomb_t : public meteoric_fall_trigger_t<demon_hunter_spell_t>
   {
     may_miss = proc = callbacks = false;
 
-    damage        = p->get_background_action<spirit_bomb_damage_t>( "spirit_bomb_damage" );
-    damage->stats = stats;
+    damage = p->get_background_action<spirit_bomb_damage_t>( "spirit_bomb_damage" );
+    add_child( damage );
   }
 
   void execute() override
@@ -5225,7 +5257,7 @@ struct sigil_of_spite_t : public demon_hunter_spell_t
     {
       sigil = p->get_background_action<sigil_of_spite_sigil_t>( "sigil_of_spite_sigil", p->spec.sigil_of_spite_damage,
                                                                 ground_aoe_duration );
-      sigil->stats = stats;
+      add_child( sigil );
     }
   }
 
@@ -5365,9 +5397,9 @@ struct sigil_of_misery_t : public demon_hunter_spell_t
   {
     if ( data().ok() )
     {
-      sigil        = p->get_background_action<sigil_of_misery_sigil_t>( "sigil_of_misery_sigil",
-                                                                        p->spec.sigil_of_misery_debuff, ground_aoe_duration );
-      sigil->stats = stats;
+      sigil = p->get_background_action<sigil_of_misery_sigil_t>( "sigil_of_misery_sigil",
+                                                                 p->spec.sigil_of_misery_debuff, ground_aoe_duration );
+      add_child( sigil );
     }
   }
 
@@ -5413,7 +5445,7 @@ struct sigil_of_silence_t : public demon_hunter_spell_t
     {
       sigil = p->get_background_action<sigil_of_silence_sigil_t>(
           "sigil_of_silence_sigil", p->spec.sigil_of_silence_debuff, ground_aoe_duration );
-      sigil->stats = stats;
+      add_child( sigil );
     }
   }
 
@@ -5457,9 +5489,9 @@ struct sigil_of_chains_t : public demon_hunter_spell_t
   {
     if ( data().ok() )
     {
-      sigil        = p->get_background_action<sigil_of_chains_sigil_t>( "sigil_of_chains_sigil",
-                                                                        p->spec.sigil_of_chains_debuff, ground_aoe_duration );
-      sigil->stats = stats;
+      sigil = p->get_background_action<sigil_of_chains_sigil_t>( "sigil_of_chains_sigil",
+                                                                 p->spec.sigil_of_chains_debuff, ground_aoe_duration );
+      add_child( sigil );
     }
   }
 
@@ -5910,7 +5942,7 @@ struct reap_t : public reap_base_t
   }
 };
 
-struct void_ray_t : public final_breath_trigger_t<doomsayer_trigger_t<demon_hunter_spell_t>>
+struct void_ray_t : public student_of_suffering_trigger_t<final_breath_trigger_t<doomsayer_trigger_t<demon_hunter_spell_t>>>
 {
   struct void_ray_tick_t : public demon_hunter_spell_t
   {
@@ -6160,6 +6192,7 @@ struct voidfall_meteor_base_t : public demon_hunter_spell_t
   {
     voidfall_meteor_damage_t( util::string_view n, demon_hunter_t* p, const spell_data_t* s ) : base_t( n, p, s )
     {
+      background = dual = true;
     }
 
     double composite_da_multiplier( const action_state_t* s ) const override
@@ -6245,6 +6278,7 @@ struct meteor_shower_t : public demon_hunter_spell_t
   {
     meteor_shower_damage_t( util::string_view n, demon_hunter_t* p ) : base_t( n, p, p->hero_spec.meteor_shower_damage )
     {
+      background = dual = true;
     }
   };
 
@@ -6288,6 +6322,7 @@ struct hungering_slash_base_t : public demon_hunter_spell_t
     hungering_slash_damage_t( util::string_view n, demon_hunter_t* p, int souls )
       : demon_hunter_spell_t( n, p, p->spec.hungering_slash_damage ), number_of_souls_to_spawn( souls )
     {
+      background = dual = true;
     }
 
     void execute() override
@@ -6393,6 +6428,16 @@ struct hungering_slash_t : public hungering_slash_base_t
       return false;
     }
     return hungering_slash_base_t::action_ready();
+  }
+};
+
+struct mid1_vengeance_4pc_damage_t : public demon_hunter_spell_t
+{
+  mid1_vengeance_4pc_damage_t( util::string_view n, demon_hunter_t* p )
+    : demon_hunter_spell_t( n, p, p->set_bonuses.mid1_vengeance_4pc_damage )
+  {
+    background = dual   = true;
+    reduced_aoe_targets = as<int>( p->set_bonuses.mid1_vengeance_4pc->effectN( 2 ).base_value() );
   }
 };
 
@@ -6721,7 +6766,7 @@ struct blade_dance_base_t
 
     for ( auto& attack : attacks )
     {
-      attack->stats = stats;
+      add_child( attack );
     }
 
     if ( attacks.front() )
@@ -7105,7 +7150,7 @@ struct chaos_strike_base_t
     // Use one stats object for all parts of the attack.
     for ( auto& attack : attacks )
     {
-      attack->stats = stats;
+      add_child( attack );
     }
   }
 
@@ -7537,8 +7582,10 @@ struct fracture_t : public voidfall_building_trigger_t<
   };
 
   fracture_damage_t *mh, *oh;
+  spells::mid1_vengeance_4pc_damage_t* mid1_veng_4pc_damage;
 
-  fracture_t( demon_hunter_t* p, util::string_view o ) : base_t( "fracture", p, p->spec.fracture, o )
+  fracture_t( demon_hunter_t* p, util::string_view o )
+    : base_t( "fracture", p, p->spec.fracture, o ), mid1_veng_4pc_damage( nullptr )
   {
     int number_of_soul_fragments_to_spawn = as<int>( data().effectN( 1 ).base_value() );
     // divide the number in 2 as half come from main hand, half come from offhand.
@@ -7550,11 +7597,23 @@ struct fracture_t : public voidfall_building_trigger_t<
         number_of_soul_fragments_to_spawn_per_hit + number_of_soul_fragments_to_spawn_leftover;
     int oh_soul_fragments_to_spawn = number_of_soul_fragments_to_spawn_per_hit;
 
-    mh        = p->get_background_action<fracture_damage_t>( "fracture_mh", data().effectN( 2 ).trigger(),
-                                                             mh_soul_fragments_to_spawn );
-    oh        = p->get_background_action<fracture_damage_t>( "fracture_oh", data().effectN( 3 ).trigger(),
-                                                             oh_soul_fragments_to_spawn );
-    mh->stats = oh->stats = stats;
+    mh = p->get_background_action<fracture_damage_t>( "fracture_mh", data().effectN( 2 ).trigger(),
+                                                      mh_soul_fragments_to_spawn );
+    add_child( mh );
+    oh = p->get_background_action<fracture_damage_t>( "fracture_oh", data().effectN( 3 ).trigger(),
+                                                      oh_soul_fragments_to_spawn );
+    add_child( oh );
+
+    if ( p->set_bonuses.mid1_vengeance_4pc->ok() )
+    {
+      mid1_veng_4pc_damage = p->get_background_action<spells::mid1_vengeance_4pc_damage_t>( "mid1_vengeance_4pc" );
+      add_child( mid1_veng_4pc_damage );
+    }
+
+    if ( p->talent.aldrachi_reaver.warblades_hunger->ok() )
+    {
+      add_child( p->active.warblades_hunger );
+    }
   }
 
   double composite_energize_amount( const action_state_t* s ) const override
@@ -7604,6 +7663,13 @@ struct fracture_t : public voidfall_building_trigger_t<
       {
         p()->active.warblades_hunger->execute_on_target( target );
         p()->buff.warblades_hunger->expire();
+      }
+
+      double percent = p()->set_bonuses.mid1_vengeance_4pc->effectN( 1 ).percent();
+      if ( p()->set_bonuses.mid1_vengeance_4pc->ok() &&
+           rng().roll( p()->set_bonuses.mid1_vengeance_4pc->effectN( 1 ).percent() ) )
+      {
+        mid1_veng_4pc_damage->execute_on_target( target );
       }
     }
   }
@@ -8069,6 +8135,13 @@ struct vengeful_retreat_t
     execute_action = p->get_background_action<vengeful_retreat_damage_t>( "vengeful_retreat_damage" );
     add_child( execute_action );
 
+    // TODO: Remove or modify when category cooldowns are implemented/fixed
+    cooldown->duration = data().category_cooldown();
+    if ( data().affected_by( p->talent.havoc.tactical_retreat->effectN( 1 ) ) )
+    {
+      cooldown->duration += p->talent.havoc.tactical_retreat->effectN( 1 ).time_value();
+    }
+
     base_teleport_distance                        = VENGEFUL_RETREAT_DISTANCE;
     movement_directionality                       = movement_direction_type::OMNI;
     p->buff.vengeful_retreat_move->distance_moved = base_teleport_distance;
@@ -8191,7 +8264,7 @@ struct fury_of_the_aldrachi_t : public demon_hunter_attack_t
     // Use one stats object for all parts of the attack.
     for ( auto& attack : attacks )
     {
-      attack->stats = stats;
+      add_child( attack );
     }
   }
 
@@ -8805,6 +8878,26 @@ struct voidfall_spending_buff_t : public demon_hunter_buff_t<buff_t>
     base_t::expire( d );
 
     p()->buff.voidfall_final_hour->trigger( stacks );
+  }
+};
+
+struct student_of_suffering_t : public demon_hunter_buff_t<buff_t>
+{
+  actions::demon_hunter_energize_t* energize;
+
+  student_of_suffering_t( demon_hunter_t* p )
+    : base_t( *p, "student_of_suffering", p->hero_spec.student_of_suffering_buff )
+  {
+    energize = p->get_background_action<actions::demon_hunter_energize_t>(
+        "student_of_suffering_energize", p->hero_spec.student_of_suffering_buff->effectN( 2 ).trigger() );
+
+    set_default_value_from_effect_type( A_MOD_MASTERY_PCT );
+    set_pct_buff_type( STAT_PCT_BUFF_MASTERY );
+    set_tick_behavior( buff_tick_behavior::REFRESH );
+    set_tick_on_application( false );
+    set_period( 2_s );
+
+    set_tick_callback( [ this ]( buff_t*, int, timespan_t ) { energize->execute(); } );
   }
 };
 
@@ -9569,17 +9662,7 @@ void demon_hunter_t::create_buffs()
                 // TOCHECK - Does this need to floor if it's not a whole number
                 b->current_value = resources.current[ RESOURCE_FURY ] * speed_per_fury;
               } );
-  buff.student_of_suffering =
-      make_buff( this, "student_of_suffering", hero_spec.student_of_suffering_buff )
-          ->set_default_value_from_effect_type( A_MOD_MASTERY_PCT )
-          ->set_pct_buff_type( STAT_PCT_BUFF_MASTERY )
-          ->set_tick_behavior( buff_tick_behavior::REFRESH )
-          ->set_tick_on_application( false )
-          ->set_period( 2_s )
-          ->set_tick_callback( [ this ]( buff_t* b, int, timespan_t ) {
-            resource_gain( RESOURCE_FURY, b->data().effectN( 2 ).trigger()->effectN( 1 ).base_value(),
-                           gain.student_of_suffering );
-          } );
+  buff.student_of_suffering = make_buff<student_of_suffering_t>( this );
 
   for ( demonsurge_ability ability : demonsurge_abilities )
   {
@@ -10744,9 +10827,12 @@ void demon_hunter_t::init_spells()
 
   // Set Bonus Items ========================================================
 
+  set_bonuses.mid1_vengeance_4pc = sets->set( DEMON_HUNTER_VENGEANCE, MID1, B4 );
+
   // Set Bonus Auxilliary ===================================================
   set_bonuses.stars_fury = conditional_spell_lookup( sets->has_set_bonus( DEMON_HUNTER_DEVOURER, MID1, B4 ),
                                                      1271663 );  // Stars' Fury (set bonus)
+  set_bonuses.mid1_vengeance_4pc_damage = conditional_spell_lookup( set_bonuses.mid1_vengeance_4pc->ok(), 1276488 );
 
   // Wounded Quarry (442808) is affected by Demon Hide.
   register_passive_affect_list( talent.havoc.demon_hide,
