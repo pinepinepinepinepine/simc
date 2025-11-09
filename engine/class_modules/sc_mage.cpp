@@ -323,6 +323,7 @@ public:
     buff_t* impetus;
     buff_t* presence_of_mind;
     buff_t* arcane_salvo;
+    buff_t* overpowered_missiles;
 
 
     // Fire
@@ -687,18 +688,18 @@ public:
     player_talent_t mana_adept;
     player_talent_t enlightened;
     player_talent_t illuminated_thoughts;
-    player_talent_t arcane_singularity;
+    player_talent_t focusing_crystal;
 
     // Row 9
     player_talent_t prodigious_savant;
     player_talent_t eureka;
-    player_talent_t electrostatic_orb;
+    player_talent_t arcane_singularity;
 
     // Row 10
     player_talent_t high_voltage;
     player_talent_t charged_missiles;
     player_talent_t overflowing_insight;
-    player_talent_t focusing_crystal;
+    player_talent_t overpowered_missiles;
     player_talent_t orb_mastery;
     player_talent_t orb_barrage;
 
@@ -3291,7 +3292,6 @@ struct arcane_orb_t final : public arcane_mage_spell_t
   {
     arcane_mage_spell_t::execute();
     p()->trigger_arcane_charge();
-    p()->trigger_arcane_salvo();
 
     if ( p()->talents.orb_mastery.ok() && p()->buffs.clearcasting->check() && type == ao_type::NORMAL )
     {
@@ -3312,14 +3312,8 @@ struct arcane_orb_t final : public arcane_mage_spell_t
       if ( s->chain_target < max_count / count )
         p()->trigger_splinter( s->target, count );
     }
-
-    if ( s->chain_target < p()->talents.electrostatic_orb->effectN( 2 ).base_value() )
-    {
-      if ( rng().roll( p()->talents.electrostatic_orb->effectN( 1 ).percent() ) )
-        p()->trigger_arcane_salvo( p()->talents.electrostatic_orb->effectN( 3 ).base_value() );
-    }
   }
-}; // me: check if salvo is gained from other types of orb
+};
 
 struct arcane_barrage_t final : public arcane_mage_spell_t
 {
@@ -3375,13 +3369,6 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
 
     p()->buffs.arcane_tempo->trigger();
     p()->buffs.arcane_charge->expire();
-
-    // With 0 stacks of Salvo, Salvo is gained after the Barrage;
-    // however, with non-zero stacks of Salvo, Salvo is gained before the execution, to subsequently be consumed with the upcoming Barrage.
-    if ( p()->buffs.arcane_salvo->check() )
-      p()->trigger_arcane_salvo();
-    else
-      make_event( *sim, [ this ] { p()->trigger_arcane_salvo(); } );
 
     // me: ok so SINCE orb barrage GETS EXECUTED FIRST, and CASTS of ORB BARRAGE (CURRENTLY, IN THIS SIM) grant SALVO, if orb barrage gets procced w/ barrage at 4 salvo, it'll +1 (or +2 w/ expanded mind),
     // me: allowing force of will to trigger a splinter because now we're at 5/6 salvo by the time we get here.
@@ -3500,7 +3487,7 @@ struct arcane_blast_t final : public arcane_mage_spell_t
 
     p()->trigger_arcane_charge( p()->find_spell( 30451 )->effectN( 2 ).base_value() );
     p()->trigger_mana_cascade();
-    p()->trigger_arcane_salvo();
+    p()->trigger_arcane_salvo( p()->talents.expanded_mind->effectN( 1 ).base_value() );
 
     if ( p()->buffs.presence_of_mind->up() )
       p()->buffs.presence_of_mind->decrement();
@@ -3598,7 +3585,7 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
     auto pulse_charges = p()->talents.arcane_pulse->effectN( 2 ).base_value();
     p()->trigger_arcane_charge( type == pulse_type::NORMAL ? pulse_charges : ( pulse_charges - p()->talents.impetus->effectN( 1 ).base_value() ) );
 
-    p()->trigger_arcane_salvo();
+    p()->trigger_arcane_salvo( p()->talents.expanded_mind->effectN( 1 ).base_value() );
     p()->trigger_splinter( target ); // me: goes on the target. check if its the spell target, particularily for the random target application s word for its echo
   }
 
@@ -3702,7 +3689,9 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
   {
     background = proc = true;
     affected_by.savant = true;
-    base_aoe_multiplier *= p->talents.aether_attunement->effectN( 1 ).percent();
+    base_aoe_multiplier *= p->find_spell( 1243307 )->effectN( 1 ).percent(); 
+    // me: if we want to treat the fields individually, this NEEDS to be revised.
+    // me: currently, overpowered missiles and aether attunement share the id, so this'll do for now.
   }
 
   int n_targets() const override
@@ -3714,7 +3703,12 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
 
     custom_state_spell_t::n_targets();
 
-    return p()->talents.aether_attunement->effectN( 2 ).base_value() + 1; // me: aa is annoying. just check everything.
+    int targets = 1;
+    targets += p()->talents.aether_attunement->effectN( 2 ).base_value();
+    if ( p()->buffs.overpowered_missiles->check() )
+      targets += p()->buffs.overpowered_missiles->data().effectN( 2 ).base_value();
+
+    return targets; // me: aa is annoying. just check everything.
   }
 
   void update_state( action_state_t* s, unsigned flags, result_amount_type rt ) override
@@ -3730,7 +3724,9 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
     if ( p()->talents.charged_missiles->ok() && p()->buffs.arcane_charge->check() )
       p()->buffs.arcane_charge->decrement();
 
-    p()->trigger_arcane_salvo( p()->talents.focusing_crystal->effectN( 1 ).base_value() );
+    p()->trigger_arcane_salvo();
+    if ( rng().roll( p()->talents.focusing_crystal->effectN( 1 ).percent() ) )
+      p()->trigger_arcane_salvo( p()->talents.focusing_crystal->effectN( 2 ).base_value() ); // me: might be a good idea to put the roll + trigger of focusing inside trigger_arcane_salvo. idk. whatever's preferable.
 
     // me: new pyrocosm, guessing its on every base missile tick execute, equally likely it'll be on impact but only applies to the initial target. also if this WAS able to trigger on any target hit by any instance of the tick impact, where do meteorites go now? check later.
     if ( rng().roll( p()->talents.pyrocosm->effectN( 1 ).percent() ) )
@@ -3755,6 +3751,9 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
     if ( p()->talents.charged_missiles.ok() && p()->buffs.arcane_charge->check() )
       am *= 1.0 + p()->talents.charged_missiles->effectN( 1 ).percent();
 
+    am *= 1.0 + p()->buffs.overpowered_missiles->check_value(); // me: prolly gonna have to move some stuff to composited multi, not specifically for missiles -- everything, need to check in game anyway.
+    // me: also, is overpowered missiles' aoe multi 75% or 50%? matters because currently its 0.5x-ing it from the +100% above, so side targets are taking the equivalent of non-opm normal missiles 
+    // me: 2x dmg on main -> base_aoe_multi is 0.5x -> 1x dmg on side. depends what "50% effectiveness" actually means. check later. would be KINDA weird if opm doesn't help in aoe outside main target.
     return am;
   }
 };
@@ -3819,6 +3818,7 @@ struct arcane_missiles_t final : public custom_state_spell_t<arcane_mage_spell_t
   void channel_finish()
   {
     p()->buffs.clearcasting_channel->expire();
+    p()->buffs.overpowered_missiles->expire();
   }
 
   bool ready() override
@@ -7732,16 +7732,16 @@ void mage_t::init_spells()
   talents.mana_adept                    = find_talent_spell( talent_tree::SPECIALIZATION, "Mana Adept"            );
   talents.enlightened                   = find_talent_spell( talent_tree::SPECIALIZATION, "Enlightened"           );
   talents.illuminated_thoughts          = find_talent_spell( talent_tree::SPECIALIZATION, "Illuminated Thoughts"  );
-  talents.arcane_singularity            = find_talent_spell( talent_tree::SPECIALIZATION, "Arcane Singularity"    );
+  talents.focusing_crystal              = find_talent_spell( talent_tree::SPECIALIZATION, "Focusing Crystal"      );
   // Row 9
   talents.prodigious_savant             = find_talent_spell( talent_tree::SPECIALIZATION, "Prodigious Savant"     );
   talents.eureka                        = find_talent_spell( talent_tree::SPECIALIZATION, "Eureka"                );
-  talents.electrostatic_orb             = find_talent_spell( talent_tree::SPECIALIZATION, "Electrostatic Orb"     );
+  talents.arcane_singularity            = find_talent_spell( talent_tree::SPECIALIZATION, "Arcane Singularity"    );
   // Row 10
   talents.high_voltage                  = find_talent_spell( talent_tree::SPECIALIZATION, "High Voltage"          );
   talents.charged_missiles              = find_talent_spell( talent_tree::SPECIALIZATION, "Charged Missiles"      );
   talents.overflowing_insight           = find_talent_spell( talent_tree::SPECIALIZATION, "Overflowing Insight"   );
-  talents.focusing_crystal              = find_talent_spell( talent_tree::SPECIALIZATION, "Focusing Crystal"      );
+  talents.overpowered_missiles          = find_talent_spell( talent_tree::SPECIALIZATION, "Overpowered Missiles"  );
   talents.orb_mastery                   = find_talent_spell( talent_tree::SPECIALIZATION, "Orb Mastery"           );
   talents.orb_barrage                   = find_talent_spell( talent_tree::SPECIALIZATION, "Orb Barrage"           );
   // Arcane Apex
@@ -8081,6 +8081,8 @@ void mage_t::create_buffs()
                                       ->set_cooldown( 0_ms )
                                       ->set_stack_change_callback( [ this ] ( buff_t*, int, int cur )
                                         { if ( cur == 0 ) cooldowns.presence_of_mind->start( cooldowns.presence_of_mind->action ); } );
+  buffs.overpowered_missiles      = make_buff( this, "overpowered_missiles", find_spell( 1277009 ) )
+                                        ->set_default_value_from_effect( 1 ); // me: don't believe i have to set_chance() it because we're rolling for it anyways -- if you don't have the talent, it's impossible for roll() to trigger
 
 
   // Fire
@@ -9234,6 +9236,10 @@ bool mage_t::trigger_clearcasting( double chance, timespan_t delay, bool never_p
     trigger_jackpot();
 
     trigger_splinter( target, talents.shifting_shards->effectN( 1 ).base_value() );
+
+    // me: should i make a trigger_overpowered_missiles function or something? whatever works.
+    if ( rng().roll( talents.overpowered_missiles->effectN( 1 ).percent() ) )
+      buffs.overpowered_missiles->trigger();
   }
 
   return success;
@@ -9360,7 +9366,7 @@ void mage_t::trigger_arcane_charge( int stacks )
 }
 
 // Defaults stacks to -1 as to avoid including talent checkers before every call.
-void mage_t::trigger_arcane_salvo( int stacks ) // also need to check what spells + background effects'll trigger salvo. future problem whenever beta comes out.
+void mage_t::trigger_arcane_salvo( int stacks ) // me: also need to check what spells + background effects'll trigger salvo. future problem whenever beta comes out.
 {
   if ( !stacks )
     return;
