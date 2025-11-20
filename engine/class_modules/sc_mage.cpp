@@ -451,12 +451,10 @@ public:
     unsigned initial_spellfire_spheres = 5;
     arcane_phoenix_rotation arcane_phoenix_rotation_override = arcane_phoenix_rotation::DEFAULT;
     bool ice_nova_consumes_winters_chill = true;
-    double clearcasting_chance = 0.0068;
-    double it_clearcasting_chance = 0.0938;
-    double blast_clearcasting_chance = 0.0938;
-    double blast_it_clearcasting_chance = 0.1618;
+    double clearcasting_chance = 0.079;
+    double illuminated_thoughts_benefit = 0.044;
     double sphere_chance = 0.058; // Spellfire Sphere has a random proc rate, as well as a BLP;
-    unsigned sphere_blp = 11;     // combined, they equal to the tooltip's 12% trigger rate. Check if different spells have a higher base proc rate as w/ Blast + CC.
+    unsigned sphere_blp = 11;     // combined, they equal to the tooltip's 12% trigger rate. me: Check if different spells have a higher base proc rate as w/ Blast + CC.
   } options;
 
   // Pets
@@ -2150,25 +2148,16 @@ public:
       timespan_t delay = 100_ms;
       // The tooltip chance present on Clearcasting/Illuminated Thoughts is the total expected outcome of Clearcasting applications, not it's random proc chance.
       // Whenever combining both the proc chance and its bad luck protection, the final application rate is equal to its tooltip chance.
-      double proc_chance = p()->options.clearcasting_chance; 
+      // In Midnight, Clearcasting's tooltip states 10%, but it appears to be 12%. As expected, Illuminated Thoughts increases the expected rate by its tooltip.
+      double proc_chance = p()->options.clearcasting_chance;
       if ( p()->talents.illuminated_thoughts.ok() )
-        proc_chance = p()->options.it_clearcasting_chance;
-      // Arcane Blast has an unmentioned 5% increase in total expected Clearcasting applications -- same BLP threshold, but higher proc chance.
-      if ( id == 30451 )
-      {
-        proc_chance = p()->options.blast_clearcasting_chance;
-        if ( p()->talents.illuminated_thoughts.ok() )
-          proc_chance = p()->options.blast_it_clearcasting_chance;
-      }
+        proc_chance += p()->options.illuminated_thoughts_benefit;
 
       p()->state.clearcasting_blp_count += 1;
       if ( p()->state.clearcasting_blp_count >= cc_blp_threshold )
         proc_chance = 1.0;
-      // Arcane Explosion, if consuming Clearcasting, has the random proc chance occur precisely whenever the Echo is executed.
-      if ( proc_chance != 1.0 && id == 1449 && snapshot_clearcasting )
-        delay = 500_ms;
 
-      if ( proc_chance == 1.0 || !background )
+      if ( proc_chance == 1.0 || !background ) // me: background procs might now not be able to trigger the blp anymore. pulse echo can't.
       {
         if ( p()->trigger_clearcasting( proc_chance, delay, background ) )
           p()->state.clearcasting_blp_count = 0;
@@ -2180,7 +2169,8 @@ public:
     if ( p()->talents.spellfire_spheres.ok() && triggers.spellfire_sphere ) // is there a blp or something? THERE IS! check what can increment the BLP.
     {
       p()->state.sphere_blp_count++;
-      if ( p()->state.sphere_blp_count >= p()->options.sphere_blp || rng().roll( p()->options.sphere_chance ) )
+      if ( ( p()->state.sphere_blp_count >= p()->options.sphere_blp ) ||
+       ( !background && rng().roll( p()->options.sphere_chance ) ) ) // me: check if !background applies to every background effect.
       {
         p()->buffs.spellfire_sphere->trigger();
         p()->state.sphere_blp_count = 0;
@@ -3525,8 +3515,7 @@ struct arcane_explosion_t final : public arcane_mage_spell_t
     parse_options( options_str );
     aoe = -1;
     affected_by.savant = true;
-    triggers.clearcasting = triggers.spellfire_sphere = true;
-    cost_reductions = { p->buffs.clearcasting };
+    triggers.clearcasting = true;
   }
 
   void execute() override
@@ -3545,7 +3534,7 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
     switch ( type )
     {
       case pulse_type::NORMAL:       return p->find_spell( 1241462 );
-      case pulse_type::ECHO:         return p->find_spell( 1241462 ); // me: actual id should be 1243460, but its apparently not whitelisted. using this id temporarily.
+      case pulse_type::ECHO:         return p->find_spell( 1241462 ); // Pulse Echo's ID is 1243460, but it's apparently not whitelisted. We're mimicking the sp coeff below.
       default:                       return nullptr;
     }
   }
@@ -3561,7 +3550,9 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
     aoe = -1;
     reduced_aoe_targets = 5;
 
-    // me: can the echo trigger clearcasting? check this, assuming it doesnt.
+    if ( type == pulse_type::ECHO )
+      spell_power_mod.direct = spell_power_mod.direct * ( p->talents.reverberate->effectN( 2 ).percent() );
+
     triggers.clearcasting = type == pulse_type::NORMAL;
     triggers.spellfire_sphere = true;
 
@@ -3581,28 +3572,27 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
 
     arcane_mage_spell_t::execute();
 
-    // Arcane Charges triggered by Reverberate's Echo do not benefit from Impetus.
-    auto pulse_charges = p()->talents.arcane_pulse->effectN( 2 ).base_value();
-    p()->trigger_arcane_charge( type == pulse_type::NORMAL ? pulse_charges : ( pulse_charges - p()->talents.impetus->effectN( 1 ).base_value() ) );
+    p()->trigger_arcane_charge( p()->talents.arcane_pulse->effectN( 2 ).base_value() );
 
-    p()->trigger_arcane_salvo( p()->talents.expanded_mind->effectN( 1 ).base_value() );
-    p()->trigger_splinter( target ); // me: goes on the target. check if its the spell target, particularily for the random target application s word for its echo
+    if ( type == pulse_type::NORMAL )
+      p()->trigger_arcane_salvo( p()->talents.expanded_mind->effectN( 1 ).base_value() );
+
+    p()->trigger_splinter( target );
+    p()->trigger_mana_cascade();
   }
 
   void impact ( action_state_t* s ) override
   {
     arcane_mage_spell_t::impact( s );
 
-    // me: the trigger_dmg of pulse gets damage multiplied based on s word, like surge or whateva, so it technically gets affected twice. 
-    // me: CHECK if its like this, or if its no multiplier -- add a dmg flag to apply only to it if so, and its chill.
     if ( s->chain_target == 0 && type == pulse_type::NORMAL && rng().roll( p()->talents.reverberate->effectN( 1 ).percent() ) )
     {
-      make_event( *sim, 150_ms, [ this, trigger_dmg = p()->talents.reverberate->effectN( 2 ).percent() * s->result_total ] 
+      make_event( *sim, 500_ms, [ this ] 
       {
         // Echo is executed on a random target damaged by the casted Pulse.
         std::vector<player_t*> tl = pulse_echo->target_list(); 
         rng().shuffle( tl.begin(), tl.end() );
-        pulse_echo->execute_on_target( tl[0], trigger_dmg );
+        pulse_echo->execute_on_target( tl[0] );
       } );
     }
   }
@@ -3611,9 +3601,13 @@ struct arcane_pulse_t final : public arcane_mage_spell_t
   {
     double am = arcane_mage_spell_t::action_multiplier();
 
-    if ( type == pulse_type::NORMAL )
-      am *= arcane_charge_multiplier( false, false );
+    // Pulse's Echo has its damage calculated on its execute, not when Pulse's spell cast finishes.
+    // If Arcane Charges are depleted after the Pulse cast but before the Echo's execution, it'll utilize 0 charges for its damage.
+    // (i.e Pulse with 4 Charges -> Barrage -> Echo gets multiplied with 0ac)
+    am *= arcane_charge_multiplier( false, false );
 
+    // TODO: Touch of the Archmage 2 is bugged, and in game, Pulse Echo's doing ~10% more damage than expected. 
+    // Maybe it's calculated in a different way? With Arcane Charge benefits being bugged, can't really properly test different theories.
     return am;
   }
 
@@ -7495,9 +7489,7 @@ void mage_t::create_options()
               } ) );
   add_option( opt_bool( "mage.ice_nova_consumes_winters_chill", options.ice_nova_consumes_winters_chill ) );
   add_option( opt_float( "mage.clearcasting_chance", options.clearcasting_chance ) );
-  add_option( opt_float( "mage.it_clearcasting_chance", options.it_clearcasting_chance ) );
-  add_option( opt_float( "mage.blast_clearcasting_chance", options.blast_clearcasting_chance ) );
-  add_option( opt_float( "mage.blast_it_clearcasting_chance", options.blast_it_clearcasting_chance ) );
+  add_option( opt_float( "mage.illuminated_thoughts_benefit", options.illuminated_thoughts_benefit ) );
   add_option( opt_float( "mage.sphere_chance", options.sphere_chance ) );
   add_option( opt_uint( "mage.sphere_blp", options.sphere_blp ) );
   player_t::create_options();
