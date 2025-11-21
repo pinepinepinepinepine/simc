@@ -3348,7 +3348,7 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
         // Likely a bug: Arcane Orb procs from Orb Barrage uniquely prevent Barrage from rolling Clearcasting's proc chance, and incrementing its BLP.
         triggers.clearcasting = false; // me: test whether or not the same bug occurs in midnight.
       }
-    } // me: if salvo is gained with ANY cast of orb, when casting arcane barrage -> orb barrage procs -> reset salvo due to barrage, will you have leftover salvo FROM the orb even after consuming salvo? check what happens with orb barrage.
+    }
 
     p()->benefits.arcane_charge.arcane_barrage->update();
 
@@ -3360,31 +3360,19 @@ struct arcane_barrage_t final : public arcane_mage_spell_t
     p()->buffs.arcane_tempo->trigger();
     p()->buffs.arcane_charge->expire();
 
-    // me: ok so SINCE orb barrage GETS EXECUTED FIRST, and CASTS of ORB BARRAGE (CURRENTLY, IN THIS SIM) grant SALVO, if orb barrage gets procced w/ barrage at 4 salvo, it'll +1 (or +2 w/ expanded mind),
-    // me: allowing force of will to trigger a splinter because now we're at 5/6 salvo by the time we get here.
-    // me: see wtf happens in game, and if force of will behaves as described above in game, put the 2 lines before orb barrage's execution... or snapshot the stacks... or make_event salvo's trigger in orb's execute. i dont know, whatever works.
-
-    // me: force of will is weird, tooltip isnt properly descriptive, instead it uses a range
-    // me: 1-4 salvo generates 1 splinter
-    // me: 5-9, 2 splinters
-    // me: 10-14, 3
-    // me: 15-19, 4
-    // me: 20, 5
-    // me: doesn't necessarily HAVE to use modulo but it allows the user to override force of will, or it'll work if blizzard changes it ig.
-    // me: new glorious incan, 11/06: assuming it works EXACTLY as above w/ force of will. check later.
+    // The number of Splinters or Meteorites triggered with Arcane Salvo is calculated based on a range of values, from which they are divisible by 5.
+    // For Example, 1-4 Salvo will trigger a single Splinter/Meteorite, 5-9 will trigger two Splinters/Meteorites, and 10-14 will trigger three.
     if ( p()->buffs.arcane_salvo->up() && ( p()->talents.force_of_will.ok() || p()->talents.glorious_incandescence.ok() ) )
     {
       int frequency = p()->talents.force_of_will.ok() ?
-        p()->talents.force_of_will->effectN( 1 ).base_value() : p()->talents.glorious_incandescence->effectN( 4 ).base_value(); // me: can just add them together because one of them will always be zero, but its kinda ugly looking
-      int amount = std::ceil( p()->buffs.arcane_salvo->check() / as<double>( frequency ) ); // me: temu logic where it's doing integer division, casting it to double to avoid it.
+        p()->talents.force_of_will->effectN( 1 ).base_value() : p()->talents.glorious_incandescence->effectN( 4 ).base_value();
+      int amount = std::ceil( p()->buffs.arcane_salvo->check() / as<double>( frequency ) );
       if ( !( p()->buffs.arcane_salvo->check() % frequency ) )
         amount++;
 
-      // me: they've ifs checking for talents within em, leaving it like this if it's fine.
-      // me: check if meteorites spawn after one another w/ some delay, assuming it's 75ms because thats what trigger_gi is using.
-      p()->trigger_splinter( target, amount ); // me: also there's probably some delay with splinters. check later.
+      p()->trigger_splinter( target, amount );
       p()->trigger_meteorite( target, amount, 75_ms );
-    } // me: new force of will AND gi: CHECK IF ITS A RANDOM TARGET.
+    }
 
     if ( p()->talents.polished_focus.ok() )
     {
@@ -3720,7 +3708,7 @@ struct arcane_missiles_tick_t final : public custom_state_spell_t<arcane_mage_sp
 
     p()->trigger_arcane_salvo();
     if ( rng().roll( p()->talents.focusing_crystal->effectN( 1 ).percent() ) )
-      p()->trigger_arcane_salvo( p()->talents.focusing_crystal->effectN( 2 ).base_value() ); // me: might be a good idea to put the roll + trigger of focusing inside trigger_arcane_salvo. idk. whatever's preferable.
+      p()->trigger_arcane_salvo( p()->talents.focusing_crystal->effectN( 2 ).base_value() );
 
     // me: new pyrocosm, guessing its on every base missile tick execute, equally likely it'll be on impact but only applies to the initial target. also if this WAS able to trigger on any target hit by any instance of the tick impact, where do meteorites go now? check later.
     if ( rng().roll( p()->talents.pyrocosm->effectN( 1 ).percent() ) )
@@ -6909,7 +6897,7 @@ struct splinter_t final : public mage_spell_t
     auto cd = p()->specialization() == MAGE_FROST ? p()->cooldowns.frozen_orb : p()->cooldowns.arcane_orb;
     cd->adjust( -p()->talents.spellfrost_teachings->effectN( p()->specialization() == MAGE_FROST ? 2 : 1 ).time_value(), false );
 
-    if ( rng().roll( p()->talents.infused_splinters->effectN( 1 ).percent() ) ) // me: not really important, but frost uses effectN 2. keeping it like this because id rather not touch anything frost. yeah.
+    if ( rng().roll( p()->talents.infused_splinters->effectN( 1 ).percent() ) )
       p()->trigger_arcane_salvo( p()->talents.infused_splinters->effectN( 3 ).base_value() );
 
     double chance = p()->sets->set( HERO_SPELLSLINGER, TWW3, B2 )->effectN( p()->specialization() == MAGE_FROST ? 2 : 1 ).percent();
@@ -9358,7 +9346,7 @@ void mage_t::trigger_arcane_charge( int stacks )
 }
 
 // Defaults stacks to -1 as to avoid including talent checkers before every call.
-void mage_t::trigger_arcane_salvo( int stacks ) // me: also need to check what spells + background effects'll trigger salvo. future problem whenever beta comes out.
+void mage_t::trigger_arcane_salvo( int stacks )
 {
   if ( !stacks )
     return;
